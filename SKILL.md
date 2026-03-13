@@ -37,7 +37,7 @@ doi-check \
 
 Add `--no-interactive` to skip the repair loop (report only).
 
-Install with:
+Install the CLI:
 
 ```bash
 uv tool install "git+https://github.com/KaiH1124/doi-check-skill.git"

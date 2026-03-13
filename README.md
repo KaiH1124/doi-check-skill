@@ -8,26 +8,43 @@ Verify BibTeX references against the [Crossref REST API](https://api.crossref.or
 
 ## Install
 
+**Step 1 — install the CLI** (works for all AI coding tools):
+
 ```bash
 uv tool install "git+https://github.com/KaiH1124/doi-check-skill.git"
-doi-check setup
 ```
-
-The `setup` command auto-detects which AI coding tools you have installed (Claude Code, OpenAI Codex, OpenCode) and copies the appropriate skill/agent config to the right place. After that, your AI assistant will automatically invoke `doi-check` when you ask it to verify references.
 
 Or with pip:
 
 ```bash
 pip install "git+https://github.com/KaiH1124/doi-check-skill.git"
-doi-check setup
 ```
 
-### What `setup` installs
+**Step 2 — register the skill** with your AI coding tool:
 
-| Tool | Config file installed |
-|------|----------------------|
-| Claude Code | `~/.claude/skills/doi-check/SKILL.md` |
-| OpenAI Codex / OpenCode | appended to `~/AGENTS.md` |
+### Claude Code
+
+```bash
+mkdir -p ~/.claude/skills/doi-check
+curl -o ~/.claude/skills/doi-check/SKILL.md \
+  https://raw.githubusercontent.com/KaiH1124/doi-check-skill/main/SKILL.md
+```
+
+Or manually copy `SKILL.md` from this repo to `~/.claude/skills/doi-check/SKILL.md`.
+
+### OpenAI Codex
+
+```bash
+mkdir -p ~/.codex/skills/doi-check
+curl -o ~/.codex/skills/doi-check/SKILL.md \
+  https://raw.githubusercontent.com/KaiH1124/doi-check-skill/main/SKILL.md
+```
+
+Or use Codex's built-in installer (if available):
+
+```bash
+install-skill-from-github.py --repo KaiH1124/doi-check-skill --path .
+```
 
 ---
 
