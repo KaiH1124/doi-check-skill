@@ -2,7 +2,14 @@
 
 Verify BibTeX references against the [Crossref REST API](https://api.crossref.org) — catch DOI errors, year mismatches, author mismatches, and title discrepancies before manuscript submission.
 
-**Zero dependencies** — pure Python stdlib (`re`, `csv`, `json`, `urllib`, `pathlib`, `argparse`).
+## Features
+
+- 🎯 **High accuracy** — compares year, first-author surname, and title word overlap against live Crossref metadata, not just DOI format
+- 🔍 **Transparent results** — every check produces a `ref_check.csv` with side-by-side bib vs. Crossref fields so you can see exactly what was compared
+- 🔄 **Interactive repair** — for each flagged entry, presents top Crossref candidates and lets you choose a replacement DOI or update full metadata in one step
+- 📦 **Zero dependencies** — pure Python stdlib (`re`, `csv`, `json`, `urllib`, `pathlib`, `argparse`), runs anywhere without `pip install`
+
+> **IMPORTANT:** This tool queries the Crossref API and results are only as accurate as the data Crossref holds. Always manually verify flagged entries — do not blindly accept suggested replacements.
 
 ---
 
@@ -20,46 +27,26 @@ Or with pip:
 pip install "git+https://github.com/KaiH1124/doi-check-skill.git"
 ```
 
-**Step 2 — register the skill** with your AI coding tool:
+**Step 2 — register the skill** by copying `SKILL.md` to your AI coding tool's skills folder:
 
-### Claude Code
+| Tool | Destination |
+|------|-------------|
+| Claude Code | `~/.claude/skills/doi-check/SKILL.md` |
+| OpenAI Codex | `~/.codex/skills/doi-check/SKILL.md` |
 
-```bash
-mkdir -p ~/.claude/skills/doi-check
-curl -o ~/.claude/skills/doi-check/SKILL.md \
-  https://raw.githubusercontent.com/KaiH1124/doi-check-skill/main/SKILL.md
-```
-
-Or manually copy `SKILL.md` from this repo to `~/.claude/skills/doi-check/SKILL.md`.
-
-### OpenAI Codex
-
-```bash
-mkdir -p ~/.codex/skills/doi-check
-curl -o ~/.codex/skills/doi-check/SKILL.md \
-  https://raw.githubusercontent.com/KaiH1124/doi-check-skill/main/SKILL.md
-```
-
-Or use Codex's built-in installer (if available):
-
-```bash
-install-skill-from-github.py --repo KaiH1124/doi-check-skill --path .
-```
+Create the folder if it doesn't exist, then copy `SKILL.md` from this repo into it.
 
 ---
 
 ## Usage
 
+Point `doi-check` at your `.bib` file and the directory containing your `.tex` files. It will scan all `.tex` files recursively, verify every cited DOI against Crossref, and write a `ref_check.csv` and `summary.txt` to the output directory (default: `output/ref_verification/`).
+
 ```bash
-doi-check --bib refs.bib --tex ./manuscript/ --out output/ref_verification/
+doi-check --bib refs.bib --tex ./manuscript/
 ```
 
-| Flag | Description |
-|------|-------------|
-| `--bib` | Path to `.bib` file (required) |
-| `--tex` | Manuscript root directory containing `.tex` files (required) |
-| `--out` | Output directory for CSV and summary (default: `output/ref_verification`) |
-| `--no-interactive` | Skip interactive repair — report only |
+Add `--no-interactive` to skip the repair prompts and get a report only.
 
 ---
 
@@ -119,13 +106,7 @@ doi-check --bib refs.bib --tex ./manuscript/ --out output/ref_verification/
 - Crossref rate limit: 0.2 s sleep between requests — ~15 s for 50 DOIs
 - `TITLE_LOW_OVERLAP` alone may be a false positive for old papers where Crossref metadata is incomplete
 - Books, standards (ISO/ASHRAE), PhD theses, GitHub repos have no DOI → `SKIP_NO_DOI`
-- **Never add inline BibTeX comments** (`doi = {10.x/y},  % note`): BibTeX treats them as field names and silently drops the entire entry. Use standalone `%` comment lines before entries instead.
-
----
-
-## Claude Code Skill
-
-This tool ships with a `SKILL.md` that registers it as a Claude Code skill. Once installed, Claude will automatically invoke `doi-check` when you ask to "check my references", "verify DOIs", "validate citations", or similar.
+- arXiv DOIs (`10.48550/arXiv.xxx`) are not indexed by Crossref and will return ERROR — use the published journal DOI instead when available
 
 ---
 
