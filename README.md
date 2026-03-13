@@ -1,4 +1,4 @@
-# doi-check
+# doi-check-skill
 
 Verify BibTeX references against the [Crossref REST API](https://api.crossref.org) — catch DOI errors, year mismatches, author mismatches, and title discrepancies before manuscript submission.
 
@@ -10,13 +10,24 @@ Verify BibTeX references against the [Crossref REST API](https://api.crossref.or
 
 ```bash
 uv tool install "git+https://github.com/KaiH1124/doi-check-skill.git"
+doi-check setup
 ```
+
+The `setup` command auto-detects which AI coding tools you have installed (Claude Code, OpenAI Codex, OpenCode) and copies the appropriate skill/agent config to the right place. After that, your AI assistant will automatically invoke `doi-check` when you ask it to verify references.
 
 Or with pip:
 
 ```bash
 pip install "git+https://github.com/KaiH1124/doi-check-skill.git"
+doi-check setup
 ```
+
+### What `setup` installs
+
+| Tool | Config file installed |
+|------|----------------------|
+| Claude Code | `~/.claude/skills/doi-check/SKILL.md` |
+| OpenAI Codex / OpenCode | appended to `~/AGENTS.md` |
 
 ---
 

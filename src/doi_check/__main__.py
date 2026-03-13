@@ -290,19 +290,96 @@ def fix_flagged_entries(rows: list, bib_entries: dict,
     return changed
 
 
+# ── Setup: install skill config for detected AI coding tools ──────────────────
+
+_TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+# Map of tool name → (detection, target_path, template_file, install_mode)
+# install_mode: "copy" = write to a dedicated file, "append" = append section to a shared file
+_TOOLS = [
+    {
+        "name":     "Claude Code",
+        "detect":   lambda: (Path.home() / ".claude").is_dir(),
+        "target":   lambda: Path.home() / ".claude" / "skills" / "doi-check" / "SKILL.md",
+        "template": "SKILL.md",
+        "mode":     "copy",
+    },
+    {
+        "name":     "OpenAI Codex / OpenCode",
+        "detect":   lambda: any(
+            _which(cmd) for cmd in ("codex", "opencode")
+        ),
+        "target":   lambda: Path.home() / "AGENTS.md",
+        "template": "AGENTS.md",
+        "mode":     "append",
+    },
+]
+
+
+def _which(cmd: str) -> bool:
+    import shutil
+    return shutil.which(cmd) is not None
+
+
+def cmd_setup(_args):
+    """Install the skill/agent config for every detected AI coding tool."""
+    found_any = False
+    for tool in _TOOLS:
+        if not tool["detect"]():
+            continue
+        found_any = True
+        target   = tool["target"]()
+        template = _TEMPLATES_DIR / tool["template"]
+        content  = template.read_text(encoding="utf-8")
+
+        if tool["mode"] == "copy":
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+            print(f"  ✓ {tool['name']:30s} → {target}")
+
+        elif tool["mode"] == "append":
+            # Only append if the doi-check section is not already present
+            existing = target.read_text(encoding="utf-8") if target.exists() else ""
+            if "doi-check" in existing:
+                print(f"  ✓ {tool['name']:30s} → {target}  (already present)")
+            else:
+                with open(target, "a", encoding="utf-8") as f:
+                    f.write("\n\n---\n\n" + content)
+                print(f"  ✓ {tool['name']:30s} → {target}  (appended)")
+
+    if not found_any:
+        print("  No supported AI coding tools detected.")
+        print("  Supported: Claude Code (~/.claude/), Codex, OpenCode")
+        print(f"  Template files are in: {_TEMPLATES_DIR}")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    # Handle `doi-check setup` before argparse to avoid subparser complexity
+    if len(sys.argv) > 1 and sys.argv[1] == "setup":
+        cmd_setup(None)
+        return
+
     parser = argparse.ArgumentParser(
-        description="Verify cited BibTeX DOIs via Crossref, with interactive repair."
+        description=(
+            "Verify cited BibTeX DOIs via Crossref, with interactive repair.\n\n"
+            "  doi-check --bib refs.bib --tex ./manuscript/\n"
+            "  doi-check setup   # install AI tool skill config"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--bib",  required=True, help="Path to .bib file")
-    parser.add_argument("--tex",  required=True, help="Manuscript root directory (contains .tex files)")
-    parser.add_argument("--out",  default="output/ref_verification",
+    parser.add_argument("--bib", required=True, help="Path to .bib file")
+    parser.add_argument("--tex", required=True,
+                        help="Manuscript root directory (contains .tex files)")
+    parser.add_argument("--out", default="output/ref_verification",
                         help="Output directory (default: output/ref_verification)")
     parser.add_argument("--no-interactive", action="store_true",
                         help="Skip the interactive repair step (report only)")
     args = parser.parse_args()
+
+    bib = args.bib
+    tex = args.tex
 
     bib_path = Path(args.bib).expanduser().resolve()
     tex_dir  = Path(args.tex).expanduser().resolve()
