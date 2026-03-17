@@ -12,9 +12,12 @@ description: >
 
 # doi-check — BibTeX Reference Verifier
 
-Systematically verifies every **actually-cited** reference in a LaTeX manuscript
-against the Crossref REST API, then guides the user through interactive repair
-of any flagged entries.
+Systematically verifies BibTeX references against the Crossref REST API, then
+guides the user through interactive repair of any flagged entries.
+
+Two modes:
+- **Default**: verify only entries actually cited in a LaTeX manuscript (`--tex`)
+- **`--all`**: verify every entry in the `.bib` file, no `.tex` directory needed
 
 ## Scripts (all stdlib only — no pip installs)
 
@@ -29,10 +32,17 @@ scripts/
 ## Running the skill
 
 ```bash
+# Default: check only cited entries (requires manuscript directory)
 doi-check \
   --bib  <path/to/refs.bib> \
   --tex  <manuscript_directory> \
   --out  <output_directory>        # default: output/ref_verification/
+
+# --all: check every entry in the bib (no .tex directory needed)
+doi-check \
+  --bib  <path/to/refs.bib> \
+  --all \
+  --out  <output_directory>
 ```
 
 Add `--no-interactive` to skip the repair loop (report only).
@@ -50,13 +60,14 @@ context or by asking the user before running.
 
 ## 5-Step Workflow
 
-### Step 1 — Filter to actually-cited references
+### Step 1 — Select entries to verify
 - Parse the `.bib` file (`bib_utils.parse_bib`)
-- Scan all `.tex` files recursively, stripping LaTeX `%` comments before
-  extracting `\cite{}` / `\citep{}` / `\citet{}` keys
-  (`bib_utils.collect_cited_keys`)
-- Only cited entries proceed to verification — entries in bib but not cited
-  are ignored; entries cited but missing from bib are flagged immediately
+- **Default mode** (`--tex`): scan all `.tex` files recursively, stripping
+  LaTeX `%` comments, then extract `\cite{}` / `\citep{}` / `\citet{}` keys
+  (`bib_utils.collect_cited_keys`). Only cited entries proceed; entries cited
+  but missing from bib are flagged immediately.
+- **`--all` mode**: skip `.tex` scanning — every entry in the bib proceeds
+  to verification regardless of whether it is cited anywhere.
 
 ### Step 2 — Run DOI check, output CSV and summary
 - For each cited entry with a DOI: query `https://api.crossref.org/works/{doi}`

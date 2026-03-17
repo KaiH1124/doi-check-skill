@@ -42,9 +42,13 @@ CSV_FIELDS = [
 
 # ── Step 1 + 2: verify all cited DOIs ────────────────────────────────────────
 
-def run_check(bib_path: Path, tex_dir: Path, out_dir: Path) -> tuple:
+def run_check(bib_path: Path, tex_dir: Path | None, out_dir: Path,
+              all_mode: bool = False) -> tuple:
     """
     Parse bib, collect cited keys, verify DOIs against Crossref.
+
+    When all_mode=True, tex_dir is ignored and every entry in the bib
+    is verified regardless of whether it is cited in any .tex file.
 
     Returns (rows, bib_entries, cited_in_bib, missing_in_bib).
     rows is a list of dicts with CSV_FIELDS keys.
@@ -53,15 +57,19 @@ def run_check(bib_path: Path, tex_dir: Path, out_dir: Path) -> tuple:
     bib_entries = parse_bib(bib_path)
     print(f"   Total entries in .bib : {len(bib_entries)}")
 
-    print(f"── [2/2] Scanning {tex_dir.name}/ for \\cite{{}} …")
-    cited_keys = collect_cited_keys(tex_dir)
-    print(f"   Unique cite-keys found : {len(cited_keys)}")
-
-    cited_in_bib   = cited_keys & set(bib_entries)
-    missing_in_bib = cited_keys - set(bib_entries)
-    print(f"   Cited & in bib         : {len(cited_in_bib)}")
-    if missing_in_bib:
-        print(f"   ⚠  Cited but NOT in bib: {sorted(missing_in_bib)}")
+    if all_mode:
+        print(f"── [2/2] --all mode: checking every entry in the bib …")
+        cited_in_bib:   set = set(bib_entries)
+        missing_in_bib: set = set()
+    else:
+        print(f"── [2/2] Scanning {tex_dir.name}/ for \\cite{{}} …")
+        cited_keys = collect_cited_keys(tex_dir)
+        print(f"   Unique cite-keys found : {len(cited_keys)}")
+        cited_in_bib   = cited_keys & set(bib_entries)
+        missing_in_bib = cited_keys - set(bib_entries)
+        print(f"   Cited & in bib         : {len(cited_in_bib)}")
+        if missing_in_bib:
+            print(f"   ⚠  Cited but NOT in bib: {sorted(missing_in_bib)}")
 
     has_doi = {k for k in cited_in_bib if bib_entries[k]["doi"]}
     no_doi  = {k for k in cited_in_bib if not bib_entries[k]["doi"]}
@@ -121,9 +129,9 @@ def run_check(bib_path: Path, tex_dir: Path, out_dir: Path) -> tuple:
 
 # ── Write outputs ─────────────────────────────────────────────────────────────
 
-def write_outputs(rows: list, bib_path: Path, tex_dir: Path,
+def write_outputs(rows: list, bib_path: Path, tex_dir: Path | None,
                   cited_in_bib: set, missing_in_bib: set,
-                  out_dir: Path) -> Path:
+                  out_dir: Path, all_mode: bool = False) -> Path:
     """Write CSV and summary.txt; return csv path."""
     out_dir.mkdir(parents=True, exist_ok=True)
     csv_path = out_dir / "ref_check.csv"
@@ -138,22 +146,33 @@ def write_outputs(rows: list, bib_path: Path, tex_dir: Path,
     error_rows   = [r for r in rows if r["status"] == "ERROR"]
     skip_rows    = [r for r in rows if r["status"] == "SKIP_NO_DOI"]
 
+    tex_label = str(tex_dir) if tex_dir else "(--all mode)"
+    if all_mode:
+        scope_lines = [
+            f"  Mode                             : --all (entire bib)",
+            f"  Entries in bib                   : {len(cited_in_bib)}",
+        ]
+    else:
+        scope_lines = [
+            f"  Unique \\cite keys in .tex         : {len(cited_in_bib) + len(missing_in_bib)}",
+            f"    └─ found in bib                 : {len(cited_in_bib)}",
+            f"    └─ MISSING from bib             : {len(missing_in_bib)}",
+        ]
+
     lines = [
         "═" * 62,
         "  Reference DOI Verification Report",
         "═" * 62,
         f"  .bib file            : {bib_path}",
-        f"  Manuscript dir       : {tex_dir}",
+        f"  Manuscript dir       : {tex_label}",
         "",
-        f"  Unique \\cite keys in .tex         : {len(cited_in_bib) + len(missing_in_bib)}",
-        f"    └─ found in bib                 : {len(cited_in_bib)}",
-        f"    └─ MISSING from bib             : {len(missing_in_bib)}",
+        *scope_lines,
         "",
-        f"  Cited with DOI (Crossref checked) : {len(ok_rows)+len(flagged_rows)+len(error_rows)}",
-        f"    └─ OK                           : {len(ok_rows)}",
-        f"    └─ FLAGGED (mismatch)           : {len(flagged_rows)}",
-        f"    └─ ERROR (DOI/API failure)      : {len(error_rows)}",
-        f"  Cited without DOI (skipped)       : {len(skip_rows)}",
+        f"  Entries with DOI (Crossref checked): {len(ok_rows)+len(flagged_rows)+len(error_rows)}",
+        f"    └─ OK                            : {len(ok_rows)}",
+        f"    └─ FLAGGED (mismatch)            : {len(flagged_rows)}",
+        f"    └─ ERROR (DOI/API failure)       : {len(error_rows)}",
+        f"  Entries without DOI (skipped)      : {len(skip_rows)}",
         "",
     ]
 
@@ -290,27 +309,106 @@ def fix_flagged_entries(rows: list, bib_entries: dict,
     return changed
 
 
+# ── Setup: install skill config for detected AI coding tools ──────────────────
+
+_TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+# Map of tool name → (detection, target_path, template_file, install_mode)
+# install_mode: "copy" = write to a dedicated file, "append" = append section to a shared file
+_TOOLS = [
+    {
+        "name":     "Claude Code",
+        "detect":   lambda: (Path.home() / ".claude").is_dir(),
+        "target":   lambda: Path.home() / ".claude" / "skills" / "doi-check" / "SKILL.md",
+        "template": "SKILL.md",
+        "mode":     "copy",
+    },
+    {
+        "name":     "OpenAI Codex / OpenCode",
+        "detect":   lambda: any(
+            _which(cmd) for cmd in ("codex", "opencode")
+        ),
+        "target":   lambda: Path.home() / "AGENTS.md",
+        "template": "AGENTS.md",
+        "mode":     "append",
+    },
+]
+
+
+def _which(cmd: str) -> bool:
+    import shutil
+    return shutil.which(cmd) is not None
+
+
+def cmd_setup(_args):
+    """Install the skill/agent config for every detected AI coding tool."""
+    found_any = False
+    for tool in _TOOLS:
+        if not tool["detect"]():
+            continue
+        found_any = True
+        target   = tool["target"]()
+        template = _TEMPLATES_DIR / tool["template"]
+        content  = template.read_text(encoding="utf-8")
+
+        if tool["mode"] == "copy":
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+            print(f"  ✓ {tool['name']:30s} → {target}")
+
+        elif tool["mode"] == "append":
+            # Only append if the doi-check section is not already present
+            existing = target.read_text(encoding="utf-8") if target.exists() else ""
+            if "doi-check" in existing:
+                print(f"  ✓ {tool['name']:30s} → {target}  (already present)")
+            else:
+                with open(target, "a", encoding="utf-8") as f:
+                    f.write("\n\n---\n\n" + content)
+                print(f"  ✓ {tool['name']:30s} → {target}  (appended)")
+
+    if not found_any:
+        print("  No supported AI coding tools detected.")
+        print("  Supported: Claude Code (~/.claude/), Codex, OpenCode")
+        print(f"  Template files are in: {_TEMPLATES_DIR}")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    # Handle `doi-check setup` before argparse to avoid subparser complexity
+    if len(sys.argv) > 1 and sys.argv[1] == "setup":
+        cmd_setup(None)
+        return
+
     parser = argparse.ArgumentParser(
-        description="Verify cited BibTeX DOIs via Crossref, with interactive repair.",
+        description=(
+            "Verify BibTeX DOIs via Crossref, with interactive repair.\n\n"
+            "  doi-check --bib refs.bib --tex ./manuscript/\n"
+            "  doi-check --bib refs.bib --all\n"
+            "  doi-check setup   # install AI tool skill config"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--bib", required=True, help="Path to .bib file")
-    parser.add_argument("--tex", required=True,
-                        help="Manuscript root directory (contains .tex files)")
+    parser.add_argument("--tex", default=None,
+                        help="Manuscript root directory (contains .tex files). "
+                             "Required unless --all is used.")
+    parser.add_argument("--all", dest="all_mode", action="store_true",
+                        help="Check every entry in the bib file, ignoring "
+                             "whether it is cited in any .tex (no --tex needed).")
     parser.add_argument("--out", default="output/ref_verification",
                         help="Output directory (default: output/ref_verification)")
     parser.add_argument("--no-interactive", action="store_true",
                         help="Skip the interactive repair step (report only)")
     args = parser.parse_args()
 
-    bib = args.bib
-    tex = args.tex
+    if not args.all_mode and args.tex is None:
+        parser.error("--tex is required unless --all is specified.")
 
     bib_path = Path(args.bib).expanduser().resolve()
-    tex_dir  = Path(args.tex).expanduser().resolve()
+    tex_dir  = Path(args.tex).expanduser().resolve() if args.tex else None
     out_dir  = Path(args.out).expanduser()
+    all_mode = args.all_mode
 
     iteration = 0
     while True:
@@ -320,10 +418,11 @@ def main():
         print(f"{'═'*62}")
 
         rows, bib_entries, cited_in_bib, missing_in_bib = run_check(
-            bib_path, tex_dir, out_dir
+            bib_path, tex_dir, out_dir, all_mode=all_mode
         )
         csv_path = write_outputs(
-            rows, bib_path, tex_dir, cited_in_bib, missing_in_bib, out_dir
+            rows, bib_path, tex_dir, cited_in_bib, missing_in_bib, out_dir,
+            all_mode=all_mode
         )
 
         flagged = [r for r in rows if r["status"] == "FLAGGED"]
