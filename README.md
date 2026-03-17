@@ -21,10 +21,17 @@ Verify BibTeX references against the [Crossref REST API](https://api.crossref.or
 uv tool install "git+https://github.com/KaiH1124/doi-check-skill.git"
 ```
 
+To update to the latest version:
+
+```bash
+uv tool install "git+https://github.com/KaiH1124/doi-check-skill.git" --force
+```
+
 Or with pip:
 
 ```bash
 pip install "git+https://github.com/KaiH1124/doi-check-skill.git"
+pip install --upgrade "git+https://github.com/KaiH1124/doi-check-skill.git"
 ```
 
 **Step 2 — register the skill** by copying `SKILL.md` to your AI coding tool's skills folder:
@@ -43,7 +50,11 @@ Create the folder if it doesn't exist, then copy `SKILL.md` from this repo into 
 Point `doi-check` at your `.bib` file and the directory containing your `.tex` files. It will scan all `.tex` files recursively, verify every cited DOI against Crossref, and write a `ref_check.csv` and `summary.txt` to the output directory (default: `output/ref_verification/`).
 
 ```bash
+# Check only entries actually cited in .tex files
 doi-check --bib refs.bib --tex ./manuscript/
+
+# Check every entry in the bib (no .tex directory needed)
+doi-check --bib refs.bib --all
 ```
 
 Add `--no-interactive` to skip the repair prompts and get a report only.
@@ -54,7 +65,7 @@ Add `--no-interactive` to skip the repair prompts and get a report only.
 
 ### 5-step workflow
 
-1. **Filter to cited references** — parses `.bib` and scans `.tex` recursively (stripping `%` comments before extracting `\cite{}` keys). Only actually-cited entries are verified.
+1. **Select entries to verify** — parses `.bib`, then either (a) scans `.tex` recursively to find only cited entries (`--tex`), or (b) checks every entry in the bib regardless of citations (`--all`).
 
 2. **Verify DOIs via Crossref** — queries `https://api.crossref.org/works/{doi}` for each cited entry with a DOI. Compares year, first-author surname, and title word overlap (≥ 40% required). Writes `ref_check.csv` and `summary.txt`.
 
